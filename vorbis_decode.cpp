@@ -92,6 +92,9 @@ int main(){
   auto oy_tainted = sandbox.malloc_in_sandbox<ogg_sync_state>();
   auto ogg_page_tainted = sandbox.malloc_in_sandbox<ogg_page>();
   auto ogg_stream_tainted = sandbox.malloc_in_sandbox<ogg_stream_state>();
+  auto vi_tainted = sandbox.malloc_in_sandbox<vorbis_info>();
+  auto vc_tainted = sandbox.malloc_in_sandbox<vorbis_comment>();
+
   /********** Decode setup ************/
 
   // --OLD--  ogg_sync_init(&oy); 
@@ -108,7 +111,7 @@ int main(){
        serialno. */
 
     /* submit a 4k block to libvorbis' Ogg layer */
-    tainted_data<char*> audio_file_data = sandbox.invoke_sandbox_function(ogg_sync_buffer,oy_tainted,fourK)
+    tainted_data<char*> audio_file_data = sandbox.invoke_sandbox_function(ogg_sync_buffer,oy_tainted,fourK);
   //   buffer=audio_file_data.copy_and_verify([](char* ret){
     
   // });
@@ -128,7 +131,8 @@ int main(){
     
     
     /* Get the first page. */
-    if(sandbox.invoke_sandbox_function(ogg_sync_pageout,oy_tainted,ogg_page_tainted)!=1){ 
+    // In the following condition it is ok to use unsafe unverified because the return value of ogg_sync_pageout is only 0/1/-1
+    if(sandbox.invoke_sandbox_function(ogg_sync_pageout,oy_tainted,ogg_page_tainted).UNSAFE_unverified()!=1){ 
       /* have we simply run out of data?  If so, we're done. */
      fprintf(stdout,"Here in #79");
      fprintf(stdout,"bytes val=%d",bytes);
@@ -139,8 +143,12 @@ int main(){
       fprintf(stdout,"Input does not appear to be an Ogg bitstream.\n");
       exit(1);
     }
-    fprintf(stdout,"Header len - ID hdr = %ld\n",ogg_page_tainted.header_len);
+    fprintf(stdout,"Header len - ID hdr = %ld\n",ogg_page_tainted->header_len.copy_and_verify([](long len){
+      // if (len<0){return -1;}
+      return len;
+    }));
     
+    // fprintf(stdout,"Header len - ID hdr = %ld\n",ogg_page_tainted->header_len.UNSAFE_unverified());
     
     /* Get the serial number and set up the rest of decode. */
     /* serialno first; use it to set up a logical stream */
@@ -163,19 +171,37 @@ int main(){
 
 
 //     vorbis_info_init(&vi);
+       sandbox.invoke_sandbox_function(vorbis_info_init, vi_tainted);
 //     vorbis_comment_init(&vc);
-//     if(ogg_stream_pagein(&os,&og)<0){ 
-//       /* error; stream version mismatch perhaps */
-//       fprintf(stdout,"Error reading first page of Ogg bitstream data.\n");
-//       exit(1);
-//     }
-//     fprintf(stdout, "BEGINNING INITIAL: %d\n", ogg_page_bos(&og));
+       sandbox.invoke_sandbox_function(vorbis_comment_init, vc_tainted);
+       
+    if(sandbox.invoke_sandbox_function(ogg_stream_pagein,ogg_stream_tainted,ogg_page_tainted).UNSAFE_unverified()<0){ 
+      /* error; stream version mismatch perhaps */
+      fprintf(stdout,"Error reading first page of Ogg bitstream data.\n");
+      exit(1);
+    }
+    fprintf(stdout, "BEGINNING INITIAL: %d\n", sandbox.invoke_sandbox_function(ogg_page_bos,ogg_page_tainted).copy_and_verify([](int ret){
+      if(ret<0){
+         exit(1);
+      }
+      return ret;
+    }));
+
     
 //     if(ogg_stream_packetout(&os,&op)!=1){ 
 //       /* no page? must not be vorbis */
 //       fprintf(stdout,"Error reading initial header packet.\n");
 //       exit(1);
 //     }
+
+    // The function only returns a status code - No need of a copy and veriufy here
+    if(sandbox_invoke_sandbox_function(ogg_stream_packetout,ogg_stream_tainetd,ogg_page_tainted).UNSAFE_unverified()!=1){ 
+      /* no page? must not be vorbis */
+      fprintf(stdout,"Error reading initial header packet.\n");
+      exit(1);
+    }
+
+
 //     fprintf(stdout,"Granule pos in initial header: %ld\n",op.granulepos);
 //     if(vorbis_synthesis_headerin(&vi,&vc,&op)<0){ 
 //       /* error case; not a vorbis header */
@@ -396,4 +422,4 @@ int main(){
   sandbox.free_in_sandbox(ogg_stream_tainted);
   sandbox.destroy_sandbox();
   return(0);
-}
+}}

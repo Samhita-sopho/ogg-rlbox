@@ -72,17 +72,17 @@ int main(){
   sandbox.create_sandbox();
 
 
-  ogg_sync_state   oy; /* sync and verify incoming physical bitstream */
-  ogg_stream_state os; /* take physical pages, weld into a logical
-                          stream of packets */
-  ogg_page         og; /* one Ogg bitstream page. Vorbis packets are inside */
-  ogg_packet       op; /* one raw packet of data for decode */
+  // ogg_sync_state   oy; /* sync and verify incoming physical bitstream */
+  // ogg_stream_state os; /* take physical pages, weld into a logical
+  //                         stream of packets */
+  // ogg_page         og; /* one Ogg bitstream page. Vorbis packets are inside */
+  // ogg_packet       op; /* one raw packet of data for decode */
 
-  vorbis_info      vi; /* struct that stores all the static vorbis bitstream
-                          settings */
-  vorbis_comment   vc; /* struct that stores all the bitstream user comments */
-  vorbis_dsp_state vd; /* central working state for the packet->PCM decoder */
-  vorbis_block     vb; /* local working space for packet->PCM decode */
+  // vorbis_info      vi; /* struct that stores all the static vorbis bitstream
+  //                         settings */
+  // vorbis_comment   vc; /* struct that stores all the bitstream user comments */
+  // vorbis_dsp_state vd; /* central working state for the packet->PCM decoder */
+  // vorbis_block     vb; /* local working space for packet->PCM decode */
   
   char *buffer;
   int  bytes;
@@ -197,10 +197,13 @@ int main(){
 //       exit(1);
 //     }
 
+
     // The function only returns a status code - No need of a copy and veriufy here
-    if(sandbox.invoke_sandbox_function(ogg_stream_packetout,ogg_stream_tainted,ogg_packet_tainted).UNSAFE_unverified()!=1){ 
+    int r1 = sandbox.invoke_sandbox_function(ogg_stream_packetout,ogg_stream_tainted,ogg_packet_tainted).UNSAFE_unverified();
+    if(r1!=1){
+      fprintf(stdout,"printing stream packet out return value %d\n",r1); 
       /* no page? must not be vorbis */
-      fprintf(stdout,"Error reading initial header packet.\n");
+      fprintf(stdout,"Error reading initial header packet ***.\n");
       exit(1);
     }
 
@@ -212,14 +215,16 @@ int main(){
 //               "audio data.\n");
 //       exit(1);
 //     }
+r1 = sandbox.invoke_sandbox_function(vorbis_synthesis_headerin,vi_tainted,vc_tainted,ogg_packet_tainted).UNSAFE_unverified();
+if(r1<0){ 
+      fprintf(stdout,"printing vorbis_synthesis_headerin return value %d\n",r1); 
 
-if(sandbox.invoke_sandbox_function(vorbis_synthesis_headerin,vi_tainted,vc_tainted,ogg_packet_tainted).UNSAFE_unverified()!=1){ 
       /* no page? must not be vorbis */
-      fprintf(stdout,"Error reading initial header packet.\n");
+      fprintf(stdout,"Error reading initial header packet #221.\n");
       exit(1);
     }
 //     fprintf(stdout,"COmment info header in!");
-    fprintf(stdout,"Channels=%d",vi.channels);
+    // fprintf(stdout,"Channels=%d",vi.channels);
 
 
 
@@ -260,7 +265,7 @@ if(sandbox.invoke_sandbox_function(vorbis_synthesis_headerin,vi_tainted,vc_taint
               fprintf(stdout,"Corrupt secondary header.  Exiting.\n");
               exit(1);
             }
-            fprintf(stdout,"Granule pos comment &  info hdr: %ld\n",op.granulepos);
+            // fprintf(stdout,"Granule pos comment &  info hdr: %ld\n",op.granulepos);
             result=sandbox.invoke_sandbox_function(vorbis_synthesis_headerin,vi_tainted,vc_tainted,ogg_packet_tainted).UNSAFE_unverified();
             if(result<0){
               fprintf(stdout,"Corrupt secondary header.  Exiting.\n");
@@ -445,16 +450,16 @@ if(sandbox.invoke_sandbox_function(vorbis_synthesis_headerin,vi_tainted,vc_taint
   time = (float)time / (float)rate;
   fprintf(stdout,"Duration of audio file = %0.4fseconds \n",time);
 
-  sandbox.free_in_sandbox(oy_tainted);
-  sandbox.free_in_sandbox(ogg_page_tainted);
-  sandbox.free_in_sandbox(ogg_stream_tainted);
-  sandbox.free_in_sandbox(ogg_page_tainted);
-  sandbox.free_in_sandbox(ogg_packet_tainted);
+  // sandbox.free_in_sandbox(oy_tainted);
+  // sandbox.free_in_sandbox(ogg_page_tainted);
+  // sandbox.free_in_sandbox(ogg_stream_tainted);
+  // sandbox.free_in_sandbox(ogg_page_tainted);
+  // sandbox.free_in_sandbox(ogg_packet_tainted);
 
-  sandbox.free_in_sandbox(vi_tainted);
-  sandbox.free_in_sandbox(vc_tainted);
-  sandbox.free_in_sandbox(vorbis_block_tainted);
-  sandbox.free_in_sandbox(vorbis_dsp_tainted);
+  // sandbox.free_in_sandbox(vi_tainted);
+  // sandbox.free_in_sandbox(vc_tainted);
+  // sandbox.free_in_sandbox(vorbis_block_tainted);
+  // sandbox.free_in_sandbox(vorbis_dsp_tainted);
   
   sandbox.destroy_sandbox();
   return(0);

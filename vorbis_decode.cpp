@@ -94,7 +94,10 @@ int main(){
   auto ogg_stream_tainted = sandbox.malloc_in_sandbox<ogg_stream_state>();
   auto vi_tainted = sandbox.malloc_in_sandbox<vorbis_info>();
   auto vc_tainted = sandbox.malloc_in_sandbox<vorbis_comment>();
-
+  auto ogg_packet_tainted = sandbox.malloc_in_sandbox<ogg_packet>();
+  auto vorbis_dsp_tainted = sandbox.malloc_in_sandbox<vorbis_dsp_state>();
+  auto vorbis_block_tainted = sandbox.malloc_in_sandbox<vorbis_block>();
+  auto pcm = sandbox.malloc_in_sandbox<>(float **);
   /********** Decode setup ************/
 
   // --OLD--  ogg_sync_init(&oy); 
@@ -195,7 +198,7 @@ int main(){
 //     }
 
     // The function only returns a status code - No need of a copy and veriufy here
-    if(sandbox_invoke_sandbox_function(ogg_stream_packetout,ogg_stream_tainetd,ogg_page_tainted).UNSAFE_unverified()!=1){ 
+    if(sandbox_invoke_sandbox_function(ogg_stream_packetout,ogg_stream_tainted,ogg_page_tainted).UNSAFE_unverified()!=1){ 
       /* no page? must not be vorbis */
       fprintf(stdout,"Error reading initial header packet.\n");
       exit(1);
@@ -209,12 +212,17 @@ int main(){
 //               "audio data.\n");
 //       exit(1);
 //     }
+
+if(sandbox_invoke_sandbox_function(vorbis_synthesis_headerin,vi_tainted,vc_tainted,).UNSAFE_unverified()!=1){ 
+      /* no page? must not be vorbis */
+      fprintf(stdout,"Error reading initial header packet.\n");
+      exit(1);
+    }
 //     fprintf(stdout,"COmment info header in!");
-//     fprintf(stdout,"Channels=%d",vi.channels);
-//     fprintf(stdout,"BR Upper=%ld",vi.bitrate_upper);
-//     fprintf(stdout,"BR Upper=%ld",vi.bitrate_nominal);
-//     fprintf(stdout,"BR Upper=%ld",vi.bitrate_lower);
-//     fprintf(stdout,"BR Upper=%ld",vi.bitrate_window);
+    fprintf(stdout,"Channels=%d",vi.channels);
+
+
+
 //     /* At this point, we're sure we're Vorbis. We've set up the logical
 //        (Ogg) bitstream decoder. Get the comment and codebook headers and
 //        set up the Vorbis decoder */
@@ -225,118 +233,143 @@ int main(){
 //        pages are missing. If a page is missing, error out; losing a
 //        header page is the only place where missing data is fatal. */
     
-//     i=0;
-//     fprintf(stdout,"AUDIO DATA STARTS HERE !");
-//     while(i<2){
-//       while(i<2){
-//         int result=ogg_sync_pageout(&oy,&og);
-//         if(result==0)break; /* Need more data */
+    i=0;
+    fprintf(stdout,"AUDIO DATA STARTS HERE !");
+    while(i<2){
+      while(i<2){
+
+        // Returns a status code only
+        int result=sandbox.invoke(ogg_sync_pageout,oy_tainted,ogg_page_tainted).copy_and_verify([](int ret){
+          if (ret<-1 || ret>1)exit(0);
+          return ret;
+        });
+        if(result==0)break; /* Need more data */
 //         /* Don't complain about missing or corrupt data yet. We'll
 //            catch it at the packet output phase */
-//         if(result==1){
-//           ogg_stream_pagein(&os,&og); /* we can ignore any errors here
+        if(result==1){
+          /* we can ignore any errors here
 //                                          as they'll also become apparent
 //                                          at packetout */
-//           while(i<2){
-//             result=ogg_stream_packetout(&os,&op);
-//             if(result==0)break;
-//             if(result<0){
-//               /* Uh oh; data at some point was corrupted or missing!
-//                  We can't tolerate that in a header.  Die. */
-//               fprintf(stdout,"Corrupt secondary header.  Exiting.\n");
-//               exit(1);
-//             }
-//             fprintf(stdout,"Granule pos comment &  info hdr: %ld\n",op.granulepos);
-//             result=vorbis_synthesis_headerin(&vi,&vc,&op);
-//             if(result<0){
-//               fprintf(stdout,"Corrupt secondary header.  Exiting.\n");
-//               exit(1);
-//             }
-//             i++;
-//           }
-//         }
-//       }
+          sandbox.invoke_sandbox_function(ogg_stream_pagein,ogg_stream_tainted,ogg_page_tainted); 
+          while(i<2){
+            result=sandbox.invoke(ogg_stream_packetout(ogg_stream_tainted,ogg_packet_tainted).UNSAFE_unverified();
+            if(result==0)break;
+            if(result<0){
+              /* Uh oh; data at some point was corrupted or missing!
+                 We can't tolerate that in a header.  Die. */
+              fprintf(stdout,"Corrupt secondary header.  Exiting.\n");
+              exit(1);
+            }
+            fprintf(stdout,"Granule pos comment &  info hdr: %ld\n",op.granulepos);
+            result=sandbox.invoke(vorbis_synthesis_headerin,(vi_tainted,vc_tainted,ogg_packet_tainted).UNSAFE_unverified();
+            if(result<0){
+              fprintf(stdout,"Corrupt secondary header.  Exiting.\n");
+              exit(1);
+            }
+            i++;
+          }
+        }
+      }
 //       /* no harm in not checking before adding more */
-//       buffer=ogg_sync_buffer(&oy,4096);
-//       file.read(buffer,4096);
-//       bytes=file.gcount();
-//       if(bytes==0 && i<2){
-//         fprintf(stdout,"End of file before finding all Vorbis headers!\n");
-//         exit(1);
-//       }
-//       ogg_sync_wrote(&oy,bytes);
-//     }
+
+      audio_file_data = sandbox.invoke_sandbox_function(ogg_sync_buffer,oy_tainted,fourK);
+  
+      buffer = audio_file_data.copy_and_verify_buffer_address(
+      [](uintptr_t val) { return reinterpret_cast<char*>(val); },
+      fourK);
+      
+      // buffer=ogg_sync_buffer(&oy,4096);
+      file.read(buffer,4096);
+      bytes=file.gcount();
+
+      if(bytes==0 && i<2){
+        fprintf(stdout,"End of file before finding all Vorbis headers!\n");
+        exit(1);
+      }
+      sandbox.invoke_sandbox_function(ogg_sync_wrote,oy_tainted,bytes);
+    }
     
 //     /* Throw the comments plus a few lines about the bitstream we're
 //        decoding */
-//     {
-//       char **ptr=vc.user_comments;
-//       while(*ptr){
-//         fprintf(stdout,"%s\n",*ptr);
-//         ++ptr;
-//       }
-//       fprintf(stdout,"\nBitstream is %d channel, %ldHz\n",vi.channels,vi.rate);
-//       rate=vi.rate;
+    {
+      // char **ptr=vc.user_comments;
+      // while(*ptr){
+      //   fprintf(stdout,"%s\n",*ptr);
+      //   ++ptr;
+      // }
+      fprintf(stdout,"\nBitstream is %d channel, %ldHz\n",vi.channels.UNSAFE_unverified(),vi.rate.UNSAFE_unverified());
+      rate=vi.rate.copy_and_verify([](long r){
+        if(r<=0){
+          fprintf(stdout,"Rate cannot be < =0, maybe some data is corrupted in the sandbox. exiting now!");
+          exit(0);
+        }
+      });
 
-//     }
-    
-//     convsize=4096/vi.channels;
+    }
+      int channels = vi.channels.copy_and_verify([](int chnls){
+        if(chnls<=0){
+          fprintf(stdout,"Numbers of channels cannot be < =0, maybe some data is corrupted in the sandbox. exiting now!");
+          exit(0);
+        }
+      });
+    convsize=4096/vi.channels;
 
 //     /* OK, got and parsed all three headers. Initialize the Vorbis
 //        packet->PCM decoder. */
-//     if(vorbis_synthesis_init(&vd,&vi)==0){ /* central decode state */
-//       vorbis_block_init(&vd,&vb);          /* local state for most of the decode
+    if(sandbox.invoke_sandbox_function(vorbis_synthesis_init,vorbis_dsp_tainted,vi_tainted).UNSAFE_unverified()==0){ /* central decode state */
+      sandbox.invoke_sandbox_function(vorbis_block_init,vorbis_dsp_tainted,vorbis_block_tainted);          /* local state for most of the decode
 //                                               so multiple block decodes can
 //                                               proceed in parallel. We could init
 //                                               multiple vorbis_block structures
 //                                               for vd here */
       
 //       /* The rest is just a straight decode loop until end of stream */
-//       while(!eos){
-//         while(!eos){
-//           int result=ogg_sync_pageout(&oy,&og);
-//           if(result==0)break; /* need more data */
-//           if(result<0){ /* missing or corrupt data at this page position */
-//             fprintf(stdout,"Corrupt or missing data in bitstream; "
-//                     "continuing...\n");
-//           }else{
-//             ogg_stream_pagein(&os,&og); /* can safely ignore errors at
-//                                            this point */
-//             fprintf(stdout, "BEGINNING : %d\n", ogg_page_bos(&og));
-//             if(ogg_page_bos(&og)>0){
-//               fprintf(stdout,"\n!-!-!-!**************************************************************************************** THIS IS IT!!\n");
-//             }
-//             fprintf(stdout, "END: %d\n", ogg_page_eos(&og));
-//             while(1){
-//               result=ogg_stream_packetout(&os,&op);
-//               if(result==0)break; /* need more data */
-//               if(result<0){ /* missing or corrupt data at this page position */
-//                 /* no reason to complain; already complained above */
-//               }else{
-//                 /* we have a packet.  Decode it */
-//                 float **pcm;
-//                 int samples;
-//                 fprintf(stdout,"Granule pos in audio packet: %ld\n",op.granulepos); 
-//                 if(first_granule_pos == 0 && (op.granulepos!=-1 && op.granulepos!=0)){
-//                   first_granule_pos = op.granulepos;
-//                 }             
-//                 else{
-//                   last_granule_pos=op.granulepos;
-//                 }
-//                 fprintf(stdout,"--------------------------------------------\n\n\n");
-//                 if(vorbis_synthesis(&vb,&op)==0) /* test for success! */
-//                   vorbis_synthesis_blockin(&vd,&vb);
-//                 /* 
-                   
-//                 **pcm is a multichannel float vector.  In stereo, for
-//                 example, pcm[0] is left, and pcm[1] is right.  samples is
-//                 the size of each channel.  Convert the float values
-//                 (-1.<=range<=1.) to whatever PCM format and write it out */
+      while(!eos){
+        while(!eos){
+          int result=sandbox.invoke_sandbox_function(ogg_sync_pageout,oy_tainted,ogg_page_tainted).UNSAFE_unverified();
+          if(result==0)break; /* need more data */
+          if(result<0){ /* missing or corrupt data at this page position */
+            fprintf(stdout,"Corrupt or missing data in bitstream; "
+                    "continuing...\n");
+          }else{
+            sandbox.invoke_sandbox_function(ogg_stream_pagein,ogg_stream_tainted,ogg_page_tainted); /* can safely ignore errors at
+                                           this point */
+        
+           
+            while(1){
+              // result=ogg_stream_packetout(&os,&op);
+              result = andbox_invoke_sandbox_function(ogg_stream_packetout,ogg_stream_tainted,ogg_page_tainted).UNSAFE_unverified();
+              if(result==0)break; /* need more data */
+              if(result<0){ /* missing or corrupt data at this page position */
+                /* no reason to complain; already complained above */
+              }else{
+                /* we have a packet.  Decode it */
                 
-//                 while((samples=vorbis_synthesis_pcmout(&vd,&pcm))>0){
-//                   int j;
-//                   int clipflag=0;
-//                   int bout=(samples<convsize?samples:convsize);
+                int samples;
+                fprintf(stdout,"Granule pos in audio packet: %ld\n",op.granulepos.UNSAFE_unverified()); 
+
+                // Getting the first granule position tha that is non-zero and non-negative
+                if(first_granule_pos == 0 && (op.granulepos.UNSAFE_unverified()!=-1 && op.granulepos.UNSAFE_unverified()!=0)){
+                  first_granule_pos = op.granulepos.UNSAFE_unverified();
+                }             
+                else{
+                  last_granule_pos=op.granulepos.UNSAFE_unverified();
+                }
+                fprintf(stdout,"--------------------------------------------\n\n\n");
+                if(sandbox.invoke_sandbox_function(vorbis_synthesis,vorbis_block_tainted,ogg_packet_tainted).UNSAFE_unverified()==0) /* test for success! */
+                    sandbox.invoke_snadbox_function(vorbis_synthesis_blockin,vorbis_dsp_tainted,vorbis_block_tainted);
+                /* 
+                   
+                **pcm is a multichannel float vector.  In stereo, for
+                example, pcm[0] is left, and pcm[1] is right.  samples is
+                the size of each channel.  Convert the float values
+                (-1.<=range<=1.) to whatever PCM format and write it out */
+                
+                // Using UNSAFE unverified here because the while loop condition checks for a positive value.
+                while((samples=sandbox.invoke_sandbox_function(vorbis_synthesis_pcmout,vorbis_dsp_tainted,pcm).UNSAFE_unverified())>0){
+                  int j;
+                  int clipflag=0;
+                  int bout=(samples<convsize?samples:convsize);
                   
 //                   /* convert floats to 16 bit signed ints (host order) and
 //                      interleave */
@@ -369,57 +402,85 @@ int main(){
                   
 //                   // fwrite(convbuffer,2*vi.channels,bout,outfile);
                   
-//                   vorbis_synthesis_read(&vd,bout); /* tell libvorbis how
+                  /* tell libvorbis how
 //                                                       many samples we
 //                                                       actually consumed */
-//                 }            
-//               }
-//             }
+                  sandbox.invoke_sandbox_function(vorbis_synthesis_read,vorbis_dsp_tainted,bout); 
+                }            
+              }
+            }
 //             if(ogg_page_eos(&og)){fprintf(stdout,"ENDS HERE MAN\n");eos=1;}
-//           }
-//         }
-//         if(!eos){
-//           buffer=ogg_sync_buffer(&oy,4096);
-//           file.read(buffer,4096);
-// 	  bytes=file.gcount();
-//           ogg_sync_wrote(&oy,bytes);
-//           if(bytes==0)eos=1;
-//         }
-//       }
+          }
+        }
+        if(!eos){
+          audio_file_data = sandbox.invoke_sandbox_function(ogg_sync_buffer,oy_tainted,fourK);
+ 
+   
+          buffer = audio_file_data.copy_and_verify_buffer_address(
+                                  [](uintptr_t val) { return reinterpret_cast<char*>(val); },
+                                                      fourK);
+
+          buffer=ogg_sync_buffer(&oy,4096);
+          file.read(buffer,4096);
+	        bytes=file.gcount();
+
+          sandbox.invoke_sandbox_function(ogg_sync_wrote,oy_tainted,bytes);
+
+          // ogg_sync_wrote(&oy,bytes);
+          if(bytes==0)eos=1;
+        }
+      }
       
 //       /* ogg_page and ogg_packet structs always point to storage in
 //          libvorbis.  They're never freed or manipulated directly */
       
 //       vorbis_block_clear(&vb);
+         sandbox.invoke_sandbox_function(vorbis_block_clear, vorbis_block_tainted);
 //       vorbis_dsp_clear(&vd);
-//     }else{
-//       fprintf(stdout,"Error: Corrupt header during playback initialization.\n");
-//     }
+         sandbox.invoke_sandbox_function(vorbis_dsp_clear,vorbis_dsp_tainted);
+    }else{
+      fprintf(stdout,"Error: Corrupt header during playback initialization.\n");
+    }
 
 //     /* clean up this logical bitstream; before exit we see if we're
 //        followed by another [chained] */
     
 //     ogg_stream_clear(&os);
+      sandbox.invoke_sandbox_function(ogg_stream_clear, ogg_stream_tainted);
+      
 //     vorbis_comment_clear(&vc);
+      sandbox.invoke_sandbox_function(vorbis_comment_clear, vc_tainted);
+      
 //     vorbis_info_clear(&vi);  /* must be called last */
-//   }
+         sandbox.invoke_sandbox_function(vorbis_info_clear, vi_tainted);
+       
+  }
 
 //   /* OK, clean up the framer */
 //   ogg_sync_clear(&oy);
-  
-//   fprintf(stdout,"Done.\n");
-//   fprintf(stdout,"First granule pos %ld\n",first_granule_pos);
+    sandbox.invoke_sandbox_function(ogg_sync_clear, oy_tainted);
+    
+  fprintf(stdout,"Done.\n");
+  fprintf(stdout,"First granule pos %ld\n",first_granule_pos);
 
-//   fprintf(stdout,"Last granule pos %ld\n",last_granule_pos);
+  fprintf(stdout,"Last granule pos %ld\n",last_granule_pos);
   
-//   fprintf(stdout,"Rate %ld\n",rate);
+  fprintf(stdout,"Rate %ld\n",rate);
 
-//   time =  floor(last_granule_pos -  first_granule_pos);
-//   time = (float)time / (float)rate;
-//   fprintf(stdout,"Duration of audio file = %0.4fseconds \n",time);
+  time =  floor(last_granule_pos -  first_granule_pos);
+  time = (float)time / (float)rate;
+  fprintf(stdout,"Duration of audio file = %0.4fseconds \n",time);
   sandbox.free_in_sandbox(oy_tainted);
   sandbox.free_in_sandbox(ogg_page_tainted);
   sandbox.free_in_sandbox(ogg_stream_tainted);
+  sandbox.free_in_sandbox(ogg_page_tainted);
+  sandbox.free_in_sandbox(ogg_packet_tainted);
+
+  sandbox.free_in_sandbox(vi_tainted);
+  sandbox.free_in_sandbox(vc_tainted);
+  sandbox.free_in_sandbox(vorbis_block_tainted);
+  sandbox.free_in_sandbox(vorbis_dsp_tainted);
+  
   sandbox.destroy_sandbox();
   return(0);
-}}
+}

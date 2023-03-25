@@ -97,7 +97,7 @@ int main(){
   auto ogg_packet_tainted = sandbox.malloc_in_sandbox<ogg_packet>();
   auto vorbis_dsp_tainted = sandbox.malloc_in_sandbox<vorbis_dsp_state>();
   auto vorbis_block_tainted = sandbox.malloc_in_sandbox<vorbis_block>();
-  auto pcm = sandbox.malloc_in_sandbox<>(float **);
+  auto pcm = sandbox.malloc_in_sandbox<float **>();
   /********** Decode setup ************/
 
   // --OLD--  ogg_sync_init(&oy); 
@@ -198,7 +198,7 @@ int main(){
 //     }
 
     // The function only returns a status code - No need of a copy and veriufy here
-    if(sandbox_invoke_sandbox_function(ogg_stream_packetout,ogg_stream_tainted,ogg_page_tainted).UNSAFE_unverified()!=1){ 
+    if(sandbox.invoke_sandbox_function(ogg_stream_packetout,ogg_stream_tainted,ogg_packet_tainted).UNSAFE_unverified()!=1){ 
       /* no page? must not be vorbis */
       fprintf(stdout,"Error reading initial header packet.\n");
       exit(1);
@@ -213,7 +213,7 @@ int main(){
 //       exit(1);
 //     }
 
-if(sandbox_invoke_sandbox_function(vorbis_synthesis_headerin,vi_tainted,vc_tainted,).UNSAFE_unverified()!=1){ 
+if(sandbox.invoke_sandbox_function(vorbis_synthesis_headerin,vi_tainted,vc_tainted,ogg_packet_tainted).UNSAFE_unverified()!=1){ 
       /* no page? must not be vorbis */
       fprintf(stdout,"Error reading initial header packet.\n");
       exit(1);
@@ -239,7 +239,7 @@ if(sandbox_invoke_sandbox_function(vorbis_synthesis_headerin,vi_tainted,vc_taint
       while(i<2){
 
         // Returns a status code only
-        int result=sandbox.invoke(ogg_sync_pageout,oy_tainted,ogg_page_tainted).copy_and_verify([](int ret){
+        int result=sandbox.invoke_sandbox_function(ogg_sync_pageout,oy_tainted,ogg_page_tainted).copy_and_verify([](int ret){
           if (ret<-1 || ret>1)exit(0);
           return ret;
         });
@@ -252,7 +252,7 @@ if(sandbox_invoke_sandbox_function(vorbis_synthesis_headerin,vi_tainted,vc_taint
 //                                          at packetout */
           sandbox.invoke_sandbox_function(ogg_stream_pagein,ogg_stream_tainted,ogg_page_tainted); 
           while(i<2){
-            result=sandbox.invoke(ogg_stream_packetout(ogg_stream_tainted,ogg_packet_tainted).UNSAFE_unverified();
+            result=sandbox.invoke_sandbox_function(ogg_stream_packetout,ogg_stream_tainted,ogg_packet_tainted).UNSAFE_unverified();
             if(result==0)break;
             if(result<0){
               /* Uh oh; data at some point was corrupted or missing!
@@ -261,7 +261,7 @@ if(sandbox_invoke_sandbox_function(vorbis_synthesis_headerin,vi_tainted,vc_taint
               exit(1);
             }
             fprintf(stdout,"Granule pos comment &  info hdr: %ld\n",op.granulepos);
-            result=sandbox.invoke(vorbis_synthesis_headerin,(vi_tainted,vc_tainted,ogg_packet_tainted).UNSAFE_unverified();
+            result=sandbox.invoke_sandbox_function(vorbis_synthesis_headerin,vi_tainted,vc_tainted,ogg_packet_tainted).UNSAFE_unverified();
             if(result<0){
               fprintf(stdout,"Corrupt secondary header.  Exiting.\n");
               exit(1);
@@ -297,22 +297,25 @@ if(sandbox_invoke_sandbox_function(vorbis_synthesis_headerin,vi_tainted,vc_taint
       //   fprintf(stdout,"%s\n",*ptr);
       //   ++ptr;
       // }
-      fprintf(stdout,"\nBitstream is %d channel, %ldHz\n",vi.channels.UNSAFE_unverified(),vi.rate.UNSAFE_unverified());
-      rate=vi.rate.copy_and_verify([](long r){
+      // WE just print them here so UNSAfe unverified is Ok.
+      fprintf(stdout,"\nBitstream is %d channel, %ldHz\n",vi_tainted->channels.UNSAFE_unverified(),vi_tainted->rate.UNSAFE_unverified());
+      rate=vi_tainted->rate.copy_and_verify([](long r){
         if(r<=0){
           fprintf(stdout,"Rate cannot be < =0, maybe some data is corrupted in the sandbox. exiting now!");
           exit(0);
         }
+        return r;
       });
 
     }
-      int channels = vi.channels.copy_and_verify([](int chnls){
+      int channels = vi_tainted->channels.copy_and_verify([](int chnls){
         if(chnls<=0){
           fprintf(stdout,"Numbers of channels cannot be < =0, maybe some data is corrupted in the sandbox. exiting now!");
           exit(0);
         }
+        return chnls;
       });
-    convsize=4096/vi.channels;
+    convsize=4096/channels;
 
 //     /* OK, got and parsed all three headers. Initialize the Vorbis
 //        packet->PCM decoder. */
@@ -338,7 +341,7 @@ if(sandbox_invoke_sandbox_function(vorbis_synthesis_headerin,vi_tainted,vc_taint
            
             while(1){
               // result=ogg_stream_packetout(&os,&op);
-              result = andbox_invoke_sandbox_function(ogg_stream_packetout,ogg_stream_tainted,ogg_page_tainted).UNSAFE_unverified();
+              result = sandbox.invoke_sandbox_function(ogg_stream_packetout,ogg_stream_tainted,ogg_packet_tainted).UNSAFE_unverified();
               if(result==0)break; /* need more data */
               if(result<0){ /* missing or corrupt data at this page position */
                 /* no reason to complain; already complained above */
@@ -346,18 +349,18 @@ if(sandbox_invoke_sandbox_function(vorbis_synthesis_headerin,vi_tainted,vc_taint
                 /* we have a packet.  Decode it */
                 
                 int samples;
-                fprintf(stdout,"Granule pos in audio packet: %ld\n",op.granulepos.UNSAFE_unverified()); 
+                fprintf(stdout,"Granule pos in audio packet: %ld\n",ogg_packet_tainted->granulepos.UNSAFE_unverified()); 
 
                 // Getting the first granule position tha that is non-zero and non-negative
-                if(first_granule_pos == 0 && (op.granulepos.UNSAFE_unverified()!=-1 && op.granulepos.UNSAFE_unverified()!=0)){
-                  first_granule_pos = op.granulepos.UNSAFE_unverified();
+                if(first_granule_pos == 0 && (ogg_packet_tainted->granulepos.UNSAFE_unverified()!=-1 && ogg_packet_tainted->granulepos.UNSAFE_unverified()!=0)){
+                  first_granule_pos = ogg_packet_tainted->granulepos.UNSAFE_unverified();
                 }             
                 else{
-                  last_granule_pos=op.granulepos.UNSAFE_unverified();
+                  last_granule_pos=ogg_packet_tainted->granulepos.UNSAFE_unverified();
                 }
                 fprintf(stdout,"--------------------------------------------\n\n\n");
                 if(sandbox.invoke_sandbox_function(vorbis_synthesis,vorbis_block_tainted,ogg_packet_tainted).UNSAFE_unverified()==0) /* test for success! */
-                    sandbox.invoke_snadbox_function(vorbis_synthesis_blockin,vorbis_dsp_tainted,vorbis_block_tainted);
+                    sandbox.invoke_sandbox_function(vorbis_synthesis_blockin,vorbis_dsp_tainted,vorbis_block_tainted);
                 /* 
                    
                 **pcm is a multichannel float vector.  In stereo, for
@@ -370,37 +373,7 @@ if(sandbox_invoke_sandbox_function(vorbis_synthesis_headerin,vi_tainted,vc_taint
                   int j;
                   int clipflag=0;
                   int bout=(samples<convsize?samples:convsize);
-                  
-//                   /* convert floats to 16 bit signed ints (host order) and
-//                      interleave */
-// //                   for(i=0;i<vi.channels;i++){
-// //                     ogg_int16_t *ptr=convbuffer+i;
-// //                     float  *mono=pcm[i];
-// // //                     for(j=0;j<bout;j++){
-// // // #if 1
-// // //                       int val=floor(mono[j]*32767.f+.5f);
-// // // #else /* optional dither */
-// // //                       int val=mono[j]*32767.f+drand48()-0.5f;
-// // // #endif
-// // //                       /* might as well guard against clipping */
-// // //                       // if(val>32767){
-// // //                       //   val=32767;
-// // //                       //   clipflag=1;
-// // //                       // }
-// // //                       // if(val<-32768){
-// // //                       //   val=-32768;
-// // //                       //   clipflag=1;
-// // //                       // }
-// // //                       *ptr=val;
-// // //                       ptr+=vi.channels;
-// // //                     }
-// //                   }
-                  
-//                   // if(clipflag)
-//                   //   fprintf(stdout,"Clipping in frame %ld\n",(long)(vd.sequence));
-                  
-                  
-//                   // fwrite(convbuffer,2*vi.channels,bout,outfile);
+
                   
                   /* tell libvorbis how
 //                                                       many samples we
@@ -413,6 +386,8 @@ if(sandbox_invoke_sandbox_function(vorbis_synthesis_headerin,vi_tainted,vc_taint
           }
         }
         if(!eos){
+          // buffer=ogg_sync_buffer(&oy,4096);
+          
           audio_file_data = sandbox.invoke_sandbox_function(ogg_sync_buffer,oy_tainted,fourK);
  
    
@@ -420,7 +395,6 @@ if(sandbox_invoke_sandbox_function(vorbis_synthesis_headerin,vi_tainted,vc_taint
                                   [](uintptr_t val) { return reinterpret_cast<char*>(val); },
                                                       fourK);
 
-          buffer=ogg_sync_buffer(&oy,4096);
           file.read(buffer,4096);
 	        bytes=file.gcount();
 
@@ -470,6 +444,7 @@ if(sandbox_invoke_sandbox_function(vorbis_synthesis_headerin,vi_tainted,vc_taint
   time =  floor(last_granule_pos -  first_granule_pos);
   time = (float)time / (float)rate;
   fprintf(stdout,"Duration of audio file = %0.4fseconds \n",time);
+
   sandbox.free_in_sandbox(oy_tainted);
   sandbox.free_in_sandbox(ogg_page_tainted);
   sandbox.free_in_sandbox(ogg_stream_tainted);
